@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Bulk Shipping Label Generator</title>
+
+<meta charset="UTF-8" />
+
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- JsBarcode -->
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
+<!-- PapaParse for CSV -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+<style>
+body { font-family: Arial; padding: 20px; }
+#csvFile { padding: 10px; }
+button {
+    padding: 12px;
+    margin-top: 15px;
+    width: 100%;
+    background: black;
+    color: white;
+    font-size: 16px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+</style>
+
+</head>
+<body>
+
+<h2>Bulk Shipping Label Generator (CSV → Multi-Label PDF)</h2>
+
+<input type="file" id="csvFile" accept=".csv" />
+<button onclick="generateBulkPDF()">Generate Bulk PDF</button>
+
+<script>
+async function generateBulkPDF() {
+    const file = document.getElementById("csvFile").files[0];
+    if (!file) {
+        alert("Please upload a CSV file.");
+        return;
+    }
+
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async function(results) {
+            await createPDF(results.data);
+        }
+    });
+}
+
+async function createPDF(rows) {
+    const { jsPDF } = window.jspdf;
+
+    const pdf = new jsPDF({ unit: "mm", format: "a6" });
+
+    let firstPage = true;
+
+    for (let row of rows) {
+
+        if (!firstPage) {
+            pdf.addPage(); // New page for each label
+        }
+        firstPage = false;
+
+        // FROM block
+        pdf.setFontSize(11);
+        pdf.text("FROM:", 10, 10);
+        const fromText = `${row.from_name}
+${row.from_address}
+Phone: ${row.from_phone}`;
+        pdf.text(pdf.splitTextToSize(fromText, 60), 10, 18);
+
+        // Shipment details (right side)
+        pdf.text("SHIP DATE:  " + row.ship_date, 100, 10, { align: "right" });
+        pdf.text("WEIGHT:  " + row.weight, 100, 18, { align: "right" });
+        pdf.text("TRACKING #:  " + row.tracking, 100, 26, { align: "right" });
+
+        // --- Barcode ---
+        let canvas = document.createElement("canvas");
+        JsBarcode(canvas, row.tracking, {
+            format: "CODE128",
+            displayValue: false,
+            width: 1,
+            height: 30
+        });
+        let barcodeImg = canvas.toDataURL("image/png");
+        pdf.addImage(barcodeImg, "PNG", 55, 32, 40, 12);
+
+        // TO block
+        pdf.setFontSize(16);
+        pdf.text("To:", 10, 60);
+
+        pdf.setFontSize(15);
+        const toText = `${row.to_name}
+${row.to_address}
+Phone: ${row.to_phone}`;
+        pdf.text(pdf.splitTextToSize(toText, 100), 10, 70);
+    }
+
+    pdf.save("bulk-shipping-labels.pdf");
+}
+</script>
+
+</body>
+</html>
